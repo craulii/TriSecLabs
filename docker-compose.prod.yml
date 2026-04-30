@@ -1,0 +1,131 @@
+# docker-compose.prod.yml — TriSecLabs Fase 2 (Hetzner VPS, override del base)
+#
+# Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Setup previo en el VPS (una sola vez):
+#   docker network create proxy
+#   mkdir -p /etc/triseclabs/secrets && chmod 700 /etc/triseclabs/secrets
+#   # Generar y escribir secretos (ver sección de comandos en CLAUDE.md)
+
+networks:
+  # Red pública: Traefik + containers expuestos al exterior.
+  # Creada manualmente antes del primer deploy: docker network create proxy
+  proxy:
+    external: true
+
+  # Red interna: postgres, worker, llama + server (que también está en proxy).
+  # internal:true impide que cualquier container inicie conexiones salientes.
+  backend:
+    driver: bridge
+    internal: true
+
+services:
+  # ---------------------------------------------------------------------------
+  # Traefik v3 — reverse proxy + TLS automático via Let's Encrypt
+  # ---------------------------------------------------------------------------
+  traefik:
+    image: traefik:v3.0
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      # Dashboard: NO exponer al exterior. Acceder via SSH tunnel:
+      # ssh -L 8080:localhost:8080 user@vps && curl http://localhost:8080
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infra/traefik/dynamic:/etc/traefik/dynamic:ro
+      # Certificados ACME: NUNCA borrar este volumen.
+      # Let's Encrypt tiene rate limit de 5 certs/dominio/semana.
+      - traefik_acme:/etc/traefik/acme
+      # Socket Docker para autodescubrir containers via labels.
+      # Considera docker-socket-proxy para reducir superficie de ataque en producción seria.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - proxy
+    labels:
+      traefik.enable: "true"
+      # Dashboard protegido con basic auth.
+      # Generar TRAEFIK_DASHBOARD_AUTH: echo $(htpasswd -nB admin) | sed -e 's/\$/\$\$/g'
+      traefik.http.routers.dashboard.rule: "Host(`traefik.triseclabs.com`)"
+      traefik.http.routers.dashboard.service: "api@internal"
+      traefik.http.routers.dashboard.entrypoints: "websecure"
+      traefik.http.routers.dashboard.tls.certresolver: "letsencrypt"
+      traefik.http.routers.dashboard.middlewares: "dashboard-auth@docker"
+      traefik.http.middlewares.dashboard-auth.basicauth.users: "${TRAEFIK_DASHBOARD_AUTH}"
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — producción
+  # ---------------------------------------------------------------------------
+  postgres:
+    # Eliminar exposición al host del compose base
+    ports: []
+    environment:
+      # Usar Docker secret en lugar de variable de entorno en texto plano.
+      # postgres espera POSTGRES_PASSWORD_FILE como alternativa a POSTGRES_PASSWORD.
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./infra/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+
+  # ---------------------------------------------------------------------------
+  # Server — producción con Traefik
+  # ---------------------------------------------------------------------------
+  server:
+    restart: always
+    # No exponer puertos directamente: Traefik termina TLS y enruta internamente.
+    ports: []
+    # Secretos de runtime desde el VPS, no del repo.
+    env_file:
+      - /etc/triseclabs/secrets/server.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+    networks:
+      - backend
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.server.rule: "Host(`app.triseclabs.com`)"
+      traefik.http.routers.server.entrypoints: "websecure"
+      traefik.http.routers.server.tls: "true"
+      traefik.http.routers.server.tls.certresolver: "letsencrypt"
+      traefik.http.routers.server.middlewares: "security-headers@file,api-ratelimit@file"
+      # Red donde Traefik busca la IP del container (debe ser "proxy").
+      traefik.docker.network: "proxy"
+      traefik.http.services.server.loadbalancer.server.port: "3000"
+
+  # ---------------------------------------------------------------------------
+  # Worker — producción
+  # ---------------------------------------------------------------------------
+  worker:
+    restart: always
+    env_file:
+      - /etc/triseclabs/secrets/worker.env
+
+  # ---------------------------------------------------------------------------
+  # llama.cpp — producción (solo con --profile llm)
+  # ---------------------------------------------------------------------------
+  llama:
+    restart: always
+    # Para VPS con GPU NVIDIA (Hetzner GX2-32 o similar), descomentar:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+secrets:
+  postgres_password:
+    file: /etc/triseclabs/secrets/postgres_password.txt
+
+volumes:
+  pg_data:
+  # CRÍTICO: volumen de certificados ACME. No borrar en producción.
+  traefik_acme:

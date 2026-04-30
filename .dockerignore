@@ -1,0 +1,28 @@
+# Rust build artifacts — el builder produce los suyos desde cero
+target/
+
+# Node.js — npm install corre dentro del builder; estos pollutan el build context
+node_modules/
+apps/web/node_modules/
+apps/desktop/node_modules/
+
+# SvelteKit build local — el builder genera el suyo
+apps/web/build/
+
+# Secretos y env locales — nunca al build context
+.env.docker.local
+.env.prod
+*.local
+
+# Modelos LLM (~4GB) — montados en runtime via volumen, no en imagen
+models/
+
+# Git y herramientas de desarrollo
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Docs y planes — no necesarios en runtime
+*.md
+.claude/

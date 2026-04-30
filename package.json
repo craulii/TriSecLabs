@@ -1,0 +1,16 @@
+{
+  "name": "triseclabs",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev":             "npm run dev        -w apps/web",
+    "build":           "npm run build      -w apps/web",
+    "check":           "npm run check      -w apps/web",
+    "desktop:dev":     "npm run tauri:dev   -w apps/desktop",
+    "desktop:build":   "npm run tauri:build -w apps/desktop"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n               id, target_id, port, protocol::text AS \"protocol!\", state::text AS \"state!\",\n               service, product, version, banner, is_active, created_at, updated_at\n           FROM exposed_ports\n           WHERE target_id = $1\n             AND is_active = true\n           ORDER BY port",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "target_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "port",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "protocol!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "state!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "service",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "product",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "banner",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "is_active",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "50c38b336005419b713bc4d8d00c9ae64c0f6e872cba3c4e251359d988bbd809"
+}

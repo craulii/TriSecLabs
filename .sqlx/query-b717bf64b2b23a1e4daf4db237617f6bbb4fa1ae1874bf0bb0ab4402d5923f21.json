@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs\n           SET status = 'running'::job_status,\n               attempts = attempts + 1,\n               updated_at = now()\n           WHERE id = (\n               SELECT id FROM jobs\n               WHERE status = 'pending'::job_status\n                 AND run_after <= now()\n                 AND attempts < max_attempts\n               ORDER BY created_at\n               FOR UPDATE SKIP LOCKED\n               LIMIT 1\n           )\n           RETURNING\n               id,\n               tenant_id,\n               job_type::text AS \"job_type!\",\n               payload,\n               status::text   AS \"status!\",\n               attempts,\n               max_attempts,\n               error",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "job_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "payload",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "max_attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      null,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "b717bf64b2b23a1e4daf4db237617f6bbb4fa1ae1874bf0bb0ab4402d5923f21"
+}

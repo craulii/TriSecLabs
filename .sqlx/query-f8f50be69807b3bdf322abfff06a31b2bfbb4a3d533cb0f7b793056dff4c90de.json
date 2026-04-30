@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, tenant_id, name, value, kind::text AS \"kind!\", risk_score,\n                  risk_level::text AS \"risk_level\", last_scanned_at, created_at\n           FROM scan_targets\n           WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "value",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "risk_score",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 6,
+        "name": "risk_level",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_scanned_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      true,
+      null,
+      true,
+      false
+    ]
+  },
+  "hash": "f8f50be69807b3bdf322abfff06a31b2bfbb4a3d533cb0f7b793056dff4c90de"
+}

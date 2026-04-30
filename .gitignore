@@ -1,0 +1,36 @@
+# ─── Rust ────────────────────────────────────────────────────────────────────
+/target/
+**/*.rs.bk
+
+# ─── Node / Frontend ─────────────────────────────────────────────────────────
+node_modules/
+apps/web/node_modules/
+apps/desktop/node_modules/
+apps/web/build/
+apps/web/.svelte-kit/
+.svelte-kit/
+
+# ─── Entorno / Secretos ──────────────────────────────────────────────────────
+.env
+.env.docker.local
+.env.prod
+*.local
+
+# ─── Modelos LLM (binarios grandes) ──────────────────────────────────────────
+/models/
+
+# ─── Infraestructura sensible ────────────────────────────────────────────────
+/infra/traefik/acme/
+
+# ─── IDE / OS ────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ─── Claude Code (interno) ───────────────────────────────────────────────────
+.claude/
+
+# NOTA: .sqlx/ se commitea intencionalmente — necesario para Docker (SQLX_OFFLINE=true)
+

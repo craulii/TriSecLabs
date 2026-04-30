@@ -1,0 +1,61 @@
+# Traefik v3 — configuración estática
+# Esta configuración se carga una sola vez al arrancar Traefik.
+# Para cambios sin reiniciar, usar el file provider (infra/traefik/dynamic/).
+
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+  fields:
+    headers:
+      defaultMode: drop
+      names:
+        X-Forwarded-For: keep
+        User-Agent: keep
+
+# Dashboard de Traefik.
+# Acceder via SSH tunnel: ssh -L 8080:localhost:8080 user@vps
+# Proteger con basic auth (ver labels en docker-compose.prod.yml).
+api:
+  dashboard: true
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+
+providers:
+  # Docker provider: autodescubre containers con traefik.enable=true.
+  docker:
+    exposedByDefault: false
+    endpoint: "unix:///var/run/docker.sock"
+    # Red Docker donde Traefik busca las IPs de los containers.
+    # Debe coincidir con la red "proxy" de docker-compose.prod.yml.
+    network: proxy
+
+  # File provider: configuración dinámica en YAML (middlewares, TLS options, etc.).
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+# Let's Encrypt con TLS-ALPN-01 challenge.
+# Solo requiere que el puerto 443 sea accesible desde internet.
+# No necesita puerto 80 abierto (a diferencia de httpChallenge).
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "ops@triseclabs.com"           # CAMBIAR al email real de ops
+      storage: /etc/traefik/acme/acme.json  # volumen persistente traefik_acme
+      tlsChallenge: {}
+      # Para staging (sin rate limit, certificados no válidos en browsers):
+      # caServer: "https://acme-staging-v02.api.letsencrypt.org/directory"

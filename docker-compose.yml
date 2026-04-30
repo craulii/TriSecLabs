@@ -1,0 +1,150 @@
+# docker-compose.yml — TriSecLabs Fase 1 (local / demo)
+#
+# Uso:
+#   cp .env.docker .env.docker.local && vi .env.docker.local
+#   docker compose --env-file .env.docker.local up -d              # stack base
+#   docker compose --env-file .env.docker.local --profile llm up -d         # + LLM
+#   docker compose --env-file .env.docker.local --profile tunnel up -d      # + HTTPS tunnel
+#   docker compose --env-file .env.docker.local --profile llm --profile tunnel up -d
+
+networks:
+  # Red interna: postgres, server, worker, llama.
+  # internal:true = ningún container puede iniciar conexiones salientes a internet.
+  # Necesario para que server y worker alcancen postgres y llama, pero no exponer
+  # la DB o el LLM directamente al exterior.
+  backend:
+    driver: bridge
+    internal: true
+
+  # Red para cloudflared <-> server.
+  # Separada de backend para que cloudflared no tenga acceso directo a postgres.
+  # El tunnel NO necesita estar en backend.
+  tunnel:
+    driver: bridge
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — base de datos principal y cola de jobs
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: triseclabs
+      POSTGRES_USER: app_user
+      # ${POSTGRES_PASSWORD} se sustituye desde el --env-file en el CLI.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    # Exponer al host solo en loopback para acceso local con psql/pgAdmin.
+    # En producción (docker-compose.prod.yml) esto se elimina con ports: [].
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d triseclabs"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Server — binario Axum + Leptos SSR
+  # ---------------------------------------------------------------------------
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server-runtime
+    restart: unless-stopped
+    # env_file inyecta variables en el container.
+    env_file:
+      - .env.docker.local
+    environment:
+      # Estos valores sobreescriben lo que venga de .env.docker.local.
+      # HOST=0.0.0.0 es crítico: sin esto Axum solo escucha en el loopback
+      # del container y Docker no puede rutear el tráfico de entrada.
+      HOST: 0.0.0.0
+      PORT: "3000"
+      # Service name "postgres" resuelto por DNS interno de Docker.
+      # "localhost" dentro del container = loopback del container mismo.
+      DATABASE_URL: postgres://app_user:${POSTGRES_PASSWORD}@postgres:5432/triseclabs
+      LLM_BASE_URL: http://llama:8080
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - backend
+      - tunnel
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Worker — background job processor (poll loop sobre la tabla jobs)
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker-runtime
+    restart: unless-stopped
+    env_file:
+      - .env.docker.local
+    environment:
+      DATABASE_URL: postgres://app_user:${POSTGRES_PASSWORD}@postgres:5432/triseclabs
+      LLM_BASE_URL: http://llama:8080
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # llama.cpp — servidor LLM local (OpenAI-compatible API)
+  # Solo activo con --profile llm. Requiere modelo GGUF en ./models/.
+  # ---------------------------------------------------------------------------
+  llama:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    restart: unless-stopped
+    volumes:
+      # El modelo debe existir antes de iniciar: mkdir models && wget ...
+      - ./models:/models:ro
+    command: >
+      -m /models/mistral-7b-instruct-v0.2.Q4_K_M.gguf
+      --host 0.0.0.0
+      --port 8080
+      --ctx-size 4096
+      --n-predict 1024
+    networks:
+      - backend
+    # Puerto NO expuesto al host: solo server y worker necesitan acceso.
+    # Para debug desde el host, agregar: ports: ["127.0.0.1:8080:8080"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    profiles:
+      - llm
+
+  # ---------------------------------------------------------------------------
+  # cloudflared — HTTPS gratuito sin cuenta (*.trycloudflare.com)
+  # Quick tunnel: la URL cambia en cada reinicio del container.
+  # Para URL estable sin costo: crear cuenta Cloudflare + tunnel named con token.
+  # ---------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --url http://server:3000
+    networks:
+      - tunnel
+    depends_on:
+      - server
+    profiles:
+      - tunnel
+
+volumes:
+  pg_data:
+    driver: local

@@ -1,0 +1,34 @@
+{
+  "productName": "TriSecLabs",
+  "version": "0.1.0",
+  "identifier": "com.triseclabs.desktop",
+  "build": {
+    "frontendDist": "../web/build",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "cd ../web && npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "TriSecLabs",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:3000; img-src 'self' data:; font-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "externalBin": ["../../target/release/server"]
+  },
+  "plugins": {
+    "shell": {
+      "sidecar": true
+    }
+  }
+}

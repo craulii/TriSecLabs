@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n               kind::text AS \"kind!\",\n               value::float8 AS \"value!\",\n               period_start\n           FROM metrics\n           WHERE target_id = $1\n             AND kind::text = $2\n           ORDER BY period_start DESC\n           LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "value!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 2,
+        "name": "period_start",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "1ff91e0ea3e3fb06c91c89b88aadf346f7e4e22594fbc7cf9ef6e4814cfbf5c0"
+}
