@@ -1,0 +1,73 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO scan_targets (tenant_id, kind, name, value)\n           VALUES ($1, $2::text::target_kind, $3, $4)\n           RETURNING id, tenant_id, name, value, kind::text AS \"kind!\", risk_score,\n                     risk_level::text AS \"risk_level\", last_scanned_at, created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "value",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "risk_score",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 6,
+        "name": "risk_level",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_scanned_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      true,
+      null,
+      true,
+      false
+    ]
+  },
+  "hash": "0b1d23121be391ad32b48bf7356fcf0d40be3131af41af171fd53c160578fbb1"
+}

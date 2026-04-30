@@ -1,5 +1,6 @@
 pub mod api;
 pub mod auth;
+pub mod stream;
 
 use axum::{middleware as axum_middleware, Router};
 use crate::state::AppState;
@@ -18,4 +19,10 @@ pub fn protected_router(state: AppState) -> Router {
             state,
             crate::middleware::auth_middleware,
         ))
+}
+
+/// Router de streams SSE: hace su propia validación JWT (header o query param)
+/// porque `EventSource` no permite headers custom.
+pub fn stream_router(state: AppState) -> Router {
+    Router::new().nest("/api", stream::router(state))
 }

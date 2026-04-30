@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs\n           SET status = 'pending',\n               error = $2,\n               run_after = now() + ($3 || ' seconds')::interval,\n               updated_at = now()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d29cd44b54187ed85a4d7e82d08ed8d327fd07df149a9ef995325b197c749522"
+}

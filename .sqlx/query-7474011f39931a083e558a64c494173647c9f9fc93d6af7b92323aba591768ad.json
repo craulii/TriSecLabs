@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE vulnerabilities\n           SET status = $2::text::vuln_status,\n               remediation_note = COALESCE($3, remediation_note),\n               resolved_at = $4,\n               updated_at = now()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7474011f39931a083e558a64c494173647c9f9fc93d6af7b92323aba591768ad"
+}

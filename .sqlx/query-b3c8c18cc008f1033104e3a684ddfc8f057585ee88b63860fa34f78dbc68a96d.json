@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, status::text AS \"status!\", attempts, error,\n                  progress, current_step,\n                  stats_json AS \"stats_json!\",\n                  created_at, updated_at\n           FROM jobs\n           WHERE tenant_id = $1\n             AND job_type = 'scan'\n             AND payload->>'target_id' = $2\n           ORDER BY created_at DESC\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "error",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "progress",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 5,
+        "name": "current_step",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "stats_json!",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b3c8c18cc008f1033104e3a684ddfc8f057585ee88b63860fa34f78dbc68a96d"
+}

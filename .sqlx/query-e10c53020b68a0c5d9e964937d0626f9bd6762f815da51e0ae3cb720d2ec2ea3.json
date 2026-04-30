@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO reports (tenant_id, target_id, content, model_used)\n                 VALUES ($1, $2, $3, 'llama.cpp')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e10c53020b68a0c5d9e964937d0626f9bd6762f815da51e0ae3cb720d2ec2ea3"
+}

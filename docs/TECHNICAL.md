@@ -206,8 +206,13 @@ attempts     INT       Intentos realizados
 max_attempts INT       Máximo (default 3)
 error        TEXT?     Mensaje de error si failed
 run_after    TIMESTAMPTZ Para reintentos con delay
+progress     SMALLINT? 0..100, NULL si aún no aplica
+current_step TEXT?     Etapa actual del job (ScanStage)
+stats_json   JSONB     Datos en vivo (puertos descubiertos, log, notas)
 ```
 **Sin RLS** — los workers acceden con conexión privilegiada.
+
+Índice parcial `idx_jobs_running_recent` sobre `updated_at` para optimizar el polling SSE de jobs en ejecución.
 
 #### `metrics` — Series temporales de métricas
 ```sql
@@ -454,8 +459,18 @@ Ejecuta antes de cada handler protegido:
 | `GET` | `/api/vendors` | Lista todos los activos del tenant |
 | `POST` | `/api/vendors` | Crea activo: `{kind, name, value}` |
 | `GET` | `/api/vendors/:id` | Obtiene activo por ID |
-| `POST` | `/api/vendors/:id/scan` | Encola job de tipo `scan` |
+| `PATCH` | `/api/vendors/:id` | Actualiza activo: `{name, value}` |
+| `DELETE` | `/api/vendors/:id` | Elimina activo (cascada en puertos y vulns) |
+| `POST` | `/api/vendors/:id/scan` | Encola job de tipo `scan`. Devuelve `{job_id}` |
 | `POST` | `/api/vendors/:id/analyze` | Encola job de tipo `llm_report` |
+| `GET` | `/api/vendors/:id/job` | Último scan job del target (snapshot completo) |
+
+### Jobs
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/jobs/:id` | Snapshot del job. Incluye `progress`, `stage`, `discovered_ports`, `log`, `note`, `error` |
+| `GET` | `/api/jobs/:id/stream` | **SSE**: stream de eventos `JobProgressEvent` hasta status terminal. Auth dual: `Authorization: Bearer` o `?token=` (necesario porque `EventSource` no soporta headers custom) |
 
 ### Puertos
 
@@ -594,11 +609,76 @@ El worker es **single-threaded por diseño** — las llamadas al LLM son secuenc
 
 **Archivo:** `crates/workers/src/handlers/scan.rs`
 
-1. Extrae `target_id` del payload
-2. Actualiza `last_scanned_at = now()` en el target
-3. **TODO:** integrar con Shodan API, NVD, nmap runner, etc.
+Pipeline completo con progreso en vivo:
 
-*Nota de arquitectura:* La integración con herramientas externas (nmap, Shodan, Nessus) se conectará aquí. El handler recibe el target y dispara el escaneo externo, luego inserta resultados en `exposed_ports` y `vulnerabilities`.
+1. **Validación de input** (`validate_target_value`):
+   - `domain` → regex DNS (RFC 1123)
+   - `ip_range` → `IpAddr::parse` o `IpNetwork::parse` si contiene `/`
+   - `vendor` / `organization` → `AppError::InvalidInput` (no escaneable directamente)
+2. **Etapa `validating`** persistida en `jobs.current_step`.
+3. **Spawn nmap** con flags:
+   ```
+   -sV --script=vulners --script-args=mincvss=5.0 -T4 --open
+   -v --stats-every 3s -oX $HOME/triseclabs-tmp/scan-<job_id>.xml
+   ```
+   El XML va a archivo (no stdout) porque con `-oX -` nmap omite las líneas legibles de progreso. El path está en `$HOME` porque el snap de nmap no puede escribir en `/tmp`.
+4. **Loop `tokio::select!`**: lee stdout y stderr línea a línea, parsea con regex:
+   - `Initiating Ping Scan / Connect Scan / Service scan / Script scanning` → cambio de etapa
+   - `About X% done` → progress dentro del rango de la etapa actual
+   - `Discovered open port N/proto on IP` → push a `discovered_ports`
+   - Throttle: persiste en DB cada 1s máximo
+   - **Keepalive cada 5s**: avanza progress lentamente cuando nmap está silencioso (NSE pre-scan, DNS resolution)
+5. **Detección de fallos silenciosos** (post-exit, aunque exit=0):
+   - `Failed to resolve` → `InvalidInput("DNS no resuelve...")`
+   - `Host seems down` → `InvalidInput("Host no responde a ping...")`
+   - `0 hosts up` → `InvalidInput("Ningún host respondió...")`
+6. **Etapa `persisting`**: parseo del XML, transacción que upsertea `exposed_ports` (ON CONFLICT por `(tenant_id, target_id, port, protocol)`) y `vulnerabilities` (ON CONFLICT por fingerprint SHA256). Marca como `is_active=false` los puertos no vistos en este scan.
+7. **Encola automáticamente un job `analysis`** tras completar.
+
+**Etapas (`ScanStage` en `crates/shared/src/models.rs`)**:
+
+| Stage | Rango progress | Detectado por |
+|---|---|---|
+| `validating` | 0–2 | Pre-spawn |
+| `starting` | 2–5 | `NSE: Loaded`, pre-scan |
+| `host_discovery` | 5–10 | `Initiating Ping Scan`, DNS resolution |
+| `port_scan` | 10–40 | `Initiating Connect/SYN Scan` + `% done` |
+| `service_detection` | 40–70 | `Initiating Service scan` |
+| `vulners` | 70–90 | `Script scanning` |
+| `persisting` | 90–99 | Post-XML parse |
+| `done` / `failed` | 100 / – | `mark_done` / `mark_failed` |
+
+**Retry inteligente** (en dispatcher de `crates/workers/src/main.rs`):
+- `AppError::InvalidInput` → `mark_failed` inmediato, sin reintento.
+- `AppError::Internal` con `attempts < max_attempts` → `requeue_with_delay(60s)`.
+
+### Real-time progress (SSE)
+
+**Endpoint:** `GET /api/jobs/:id/stream`  (`crates/backend/src/routes/stream.rs`)
+
+- **Auth dual**: header `Authorization: Bearer` o query param `?token=` (necesario porque `EventSource` no acepta headers custom).
+- Polling de `jobs::get_by_id` cada 800ms con `futures::stream::unfold`.
+- Emite `JobProgressEvent` solo cuando cambia `updated_at` o se alcanza status terminal.
+- Cierre limpio al recibir `done` / `failed` + `take_until` con timeout duro de 15min.
+- Keep-alive 15s.
+
+**Snapshot fallback:** `GET /api/jobs/:id` devuelve el mismo `JobProgressEvent` para clientes que no soportan SSE (Tauri WebView en algunas plataformas).
+
+**Tipo compartido (`crates/shared/src/models.rs`):**
+
+```rust
+pub struct JobProgressEvent {
+    pub id:               Uuid,
+    pub status:           String,            // pending|running|done|failed
+    pub stage:            Option<ScanStage>,
+    pub progress:         Option<i16>,        // 0..100
+    pub discovered_ports: Vec<DiscoveredPort>,
+    pub log:              Vec<String>,
+    pub error:            Option<String>,
+    pub note:             Option<String>,    // "Sin puertos abiertos detectados", etc.
+    pub updated_at:       DateTime<Utc>,
+}
+```
 
 ### Handler: `analysis`
 
@@ -728,8 +808,14 @@ Todos los clientes usan el helper base en `client.ts`:
 
 **`targets.ts`** — `targetsApi`
 - `list()`, `get(id)`, `create({kind, name, value})`
-- `enqueueScan(id)`, `enqueueLlmReport(id)`
+- `update(id, {name, value})`, `delete(id)`
+- `enqueueScan(id)` → `{job_id}`, `enqueueLlmReport(id)`
+- `getLatestJob(id)` → `LatestJobSummary` (status, progress, current_step, stats_json, error)
 - `listPorts(id)`
+
+**`jobs.ts`** — `jobsApi`
+- `getSnapshot(id)` → `JobProgressEvent` (snapshot puntual)
+- `stream(id, onEvent, onError)` → `EventSource` que emite `JobProgressEvent` hasta status terminal. El caller debe llamar `.close()` en cleanup. Usado por `ScanLiveDrawer`.
 
 **`vulnerabilities.ts`** — `vulnsApi`
 - `listForTarget(targetId)`
@@ -750,15 +836,30 @@ Todos los clientes usan el helper base en `client.ts`:
 - `DataTable.svelte` — tabla genérica con sorting, skeleton loading, slots para celdas y acciones
 - `Pagination.svelte` — paginación con límite configurable
 - `RiskBadge.svelte` — badge de color para `RiskLevel` y `VulnStatus`
+- `ProgressBar.svelte` — barra de progreso determinada/indeterminada con label y ARIA
+
+**Iconos (`src/lib/icons/`):** SVG inline lucide-style con prop `size`/`strokeWidth`:
+`Play`, `Loader` (spin), `Bot`, `Pencil`, `Trash`, `Search`, `X`, `AlertCircle`, `Activity`, `Check`, `ChevronUp`/`Down`/`UpDown`. Reemplazan emojis por iconografía profesional consistente.
+
+**Scan en vivo (`src/lib/components/scan/`):**
+- `ScanLiveDrawer.svelte` — drawer 440px que abre al lanzar un scan. Conecta `EventSource` al endpoint SSE, muestra:
+  - ProgressBar con etapa actual y porcentaje
+  - Timeline vertical de las 7 etapas (`done` / `active` / `pending`)
+  - Tabla de puertos descubiertos en tiempo real (port, proto, service)
+  - Log tail con últimas 10–12 líneas de nmap
+  - Sección de resumen al completar: mensaje claro para 0 puertos, error legible para fallos
+  - Auto-cierra `EventSource` al recibir `done`/`failed`; cleanup en `$effect` y `onDestroy`
 
 **Charts (ECharts via dynamic import en `onMount`):**
 - `EChart.svelte` — wrapper reactivo para ECharts, destruye instancia en `onDestroy`
 - `RiskGauge.svelte` — gauge 0–100 para risk score
 - `VulnTimeline.svelte` — líneas temporales por severidad
 
-### Sistema de temas
+### Sistema de temas y design tokens
 
-CSS custom properties en `app.css`, aplicadas via `data-theme` en `<html>`:
+CSS custom properties en `app.css`, aplicadas via `data-theme` en `<html>`. Base font-size **16px** (`--font-size-base`).
+
+**Paleta:**
 
 | Variable | Dark | Light |
 |---|---|---|
@@ -770,7 +871,15 @@ CSS custom properties en `app.css`, aplicadas via `data-theme` en `<html>`:
 | `--text-secondary` | `#94a3b8` | `#475569` |
 | `--accent` | `#3b82f6` | `#2563eb` |
 
-Colores de severidad: `--sev-critical` `#ef4444`, `--sev-high` `#f97316`, `--sev-medium` `#f59e0b`, `--sev-low` `#22c55e`, `--sev-info` `#94a3b8`
+Severidad: `--sev-critical` `#ef4444`, `--sev-high` `#f97316`, `--sev-medium` `#f59e0b`, `--sev-low` `#22c55e`, `--sev-info` `#94a3b8`.
+
+**Tokens de sistema:**
+
+- **Spacing** (escala 4px): `--space-1` (0.25rem) … `--space-16` (4rem)
+- **Typography**: `--font-size-xs` (12px) → `--font-size-2xl` (30px); `--line-height-tight/base/loose`; `--font-weight-regular/medium/semibold/bold`
+- **Radius**: `--radius-sm/md/lg/xl/pill`
+- **Shadows**: `--shadow-sm/md/lg`
+- **Layout**: `--max-content-width: 1280px`
 
 ---
 
@@ -834,11 +943,17 @@ cd ~/projects/TriSecLabs
 ```
 
 El script:
-1. Inicia PostgreSQL (`pg_ctl start`) si no está corriendo
-2. Compila y lanza el servidor Axum en background
-3. Inicia Vite dev server en primer plano (con hot-reload)
+1. Inicia PostgreSQL (`pg_ctl start -D ~/postgres/data`) si no está corriendo, y verifica que `pg_isready` responda en `:5433`.
+2. Carga `.env` (falla si no existe).
+3. Compila `server` y `worker` (`cargo build` incremental).
+4. **Mata cualquier instancia previa de server/worker con `pkill`** — evita correr binarios viejos tras un cambio de código.
+5. Lanza el server con `nohup` y espera hasta 15s a que responda en `:3000` (healthcheck contra `/api/auth/login`).
+6. Lanza el worker; verifica que no muera al arrancar.
+7. `exec npm run dev` — Vite en primer plano. Server y worker (disowned) sobreviven al `Ctrl+C` final.
 
-Accede a `http://localhost:5173` — credenciales: `admin@demo.com` / `admin123` (tenant: `demo`)
+Logs: `/tmp/triseclabs-server.log` y `/tmp/triseclabs-worker.log`.
+
+Accede a `http://localhost:5173` — credenciales: `admin@demo.com` / `admin123` (tenant: `demo`).
 
 ### Setup manual
 

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT title, severity::text AS \"severity!\", cve_id,\n                          cvss_score::float4 AS cvss_score\n                   FROM scan_findings\n                   WHERE target_id = $1\n                   ORDER BY severity DESC\n                   LIMIT 20",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "severity!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "cve_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "cvss_score",
+        "type_info": "Float4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "001197f0ac228563c001eeaccc2ba972d31436a250f61a7ac5ee25236a91ef58"
+}

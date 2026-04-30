@@ -69,6 +69,7 @@ async fn main() {
 
     let app = Router::new()
         .merge(routes::public_router(state.clone()))
+        .merge(routes::stream_router(state.clone()))
         .merge(routes::protected_router(state.clone()))
         .nest_service(
             "/",

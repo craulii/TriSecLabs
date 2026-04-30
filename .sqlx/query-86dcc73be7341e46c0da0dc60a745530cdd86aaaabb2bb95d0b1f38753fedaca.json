@@ -1,0 +1,95 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, tenant_id,\n                  job_type::text AS \"job_type!\",\n                  payload,\n                  status::text   AS \"status!\",\n                  attempts, max_attempts, error,\n                  progress, current_step,\n                  stats_json AS \"stats_json!\",\n                  created_at, updated_at\n           FROM jobs\n           WHERE id = $1 AND tenant_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "job_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "payload",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "max_attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "error",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "progress",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 9,
+        "name": "current_step",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "stats_json!",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      null,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "86dcc73be7341e46c0da0dc60a745530cdd86aaaabb2bb95d0b1f38753fedaca"
+}

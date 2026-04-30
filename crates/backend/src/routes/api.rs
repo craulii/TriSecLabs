@@ -15,9 +15,12 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         // Targets (alias legacy: /vendors)
         .route("/vendors",              get(list_targets).post(create_target))
-        .route("/vendors/:id",          get(get_target))
+        .route("/vendors/:id",          get(get_target).patch(update_target).delete(delete_target))
         .route("/vendors/:id/scan",     post(enqueue_scan))
         .route("/vendors/:id/analyze",  post(enqueue_llm_report))
+        .route("/vendors/:id/job",      get(get_latest_job))
+        // Jobs (lectura puntual)
+        .route("/jobs/:id",             get(get_job_snapshot))
         // Ports & vulns bajo /targets (más semánticamente correcto)
         .route("/targets/:id/ports",           get(list_ports))
         .route("/targets/:id/vulnerabilities", get(list_vulns_for_target))
@@ -94,6 +97,88 @@ async fn create_target(
     {
         Ok(t)  => (StatusCode::CREATED, Json(t)).into_response(),
         Err(e) => err500(e),
+    }
+}
+
+#[derive(Deserialize)]
+struct UpdateTargetBody {
+    name:  String,
+    value: String,
+}
+
+async fn update_target(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<TenantContext>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<UpdateTargetBody>,
+) -> impl IntoResponse {
+    use db::{queries::scan_targets, with_tenant};
+
+    match with_tenant(&state.db, ctx.tenant_id, |tx| {
+        Box::pin(async move {
+            scan_targets::update(tx, id, &body.name, &body.value).await
+        })
+    })
+    .await
+    {
+        Ok(t)  => (StatusCode::OK, Json(t)).into_response(),
+        Err(e) => err500(e),
+    }
+}
+
+async fn delete_target(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<TenantContext>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    use db::{queries::scan_targets, with_tenant_conn};
+
+    match with_tenant_conn(&state.db, ctx.tenant_id, |conn| {
+        Box::pin(async move { scan_targets::delete(conn, id).await })
+    })
+    .await
+    {
+        Ok(true)  => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "not found" }))).into_response(),
+        Err(e)    => err500(e),
+    }
+}
+
+async fn get_latest_job(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<TenantContext>,
+    Path(target_id): Path<Uuid>,
+) -> impl IntoResponse {
+    use db::queries::jobs;
+
+    match jobs::latest_scan_for_target(&state.db, *ctx.tenant_id.as_uuid(), target_id).await {
+        Ok(Some(j)) => (StatusCode::OK, Json(serde_json::json!({
+            "id":           j.id,
+            "status":       j.status,
+            "attempts":     j.attempts,
+            "error":        j.error,
+            "progress":     j.progress,
+            "current_step": j.current_step,
+            "stats_json":   j.stats_json,
+            "created_at":   j.created_at,
+            "updated_at":   j.updated_at,
+        }))).into_response(),
+        Ok(None)    => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "no jobs" }))).into_response(),
+        Err(e)      => err500(e),
+    }
+}
+
+async fn get_job_snapshot(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<TenantContext>,
+    Path(job_id): Path<Uuid>,
+) -> impl IntoResponse {
+    use db::queries::jobs;
+
+    match jobs::get_by_id(&state.db, *ctx.tenant_id.as_uuid(), job_id).await {
+        Ok(Some(j)) => (StatusCode::OK, Json(crate::routes::stream::row_to_event(&j))).into_response(),
+        Ok(None)    => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "not found" }))).into_response(),
+        Err(e)      => err500(e),
     }
 }
 

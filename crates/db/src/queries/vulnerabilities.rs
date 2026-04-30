@@ -26,6 +26,46 @@ pub struct VulnerabilityRow {
     pub resolved_at:      Option<DateTime<Utc>>,
 }
 
+pub async fn upsert_from_scan(
+    conn: &mut PgConnection,
+    tenant_id: Uuid,
+    target_id: Uuid,
+    port_id: Option<Uuid>,
+    fingerprint: &str,
+    title: &str,
+    severity: &str,
+    cvss_score: Option<f64>,
+    cve_id: Option<&str>,
+    evidence: &serde_json::Value,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        r#"INSERT INTO vulnerabilities
+               (tenant_id, target_id, port_id, fingerprint, title, severity, cvss_score,
+                cve_id, source, evidence, status)
+           VALUES ($1, $2, $3, $4, $5, $6::text::risk_level, $7::float8, $8, 'nmap'::vuln_source, $9, 'open'::vuln_status)
+           ON CONFLICT (tenant_id, target_id, fingerprint)
+           DO UPDATE SET
+               last_seen_at = now(),
+               cvss_score   = EXCLUDED.cvss_score,
+               evidence     = EXCLUDED.evidence,
+               updated_at   = now()"#,
+        tenant_id,
+        target_id,
+        port_id,
+        fingerprint,
+        title,
+        severity,
+        cvss_score,
+        cve_id,
+        evidence,
+    )
+    .execute(conn)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?;
+
+    Ok(())
+}
+
 pub async fn list_for_target(
     conn: &mut PgConnection,
     target_id: Uuid,

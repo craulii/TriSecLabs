@@ -1,17 +1,18 @@
 mod handlers;
 
-use common::TenantId;
+use common::{AppError, TenantId};
 use db::{create_pool, queries::jobs};
 use llm::LlmClient;
 use std::time::Duration;
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use uuid::Uuid;
 
 /// WorkerState — inmutable, cloneable, compartido entre iteraciones del loop.
 #[derive(Clone)]
 struct WorkerState {
     pool: db::PgPool,
-    llm: LlmClient,
+    llm:  LlmClient,
 }
 
 #[tokio::main]
@@ -38,8 +39,6 @@ async fn main() {
 
     info!("worker started, polling for jobs");
 
-    // Poll loop — LLM jobs son secuenciales (concurrencia=1) por diseño.
-    // Los jobs scan/analysis se podrían paralelizar en el futuro con un semáforo.
     loop {
         match jobs::dequeue_next(&state.pool).await {
             Err(e) => {
@@ -53,8 +52,7 @@ async fn main() {
                 info!(job_id = %job.id, job_type = %job.job_type, "processing job");
 
                 let tenant_id = TenantId::from(job.tenant_id);
-
-                let result = dispatch(&state, &job.job_type, tenant_id, &job.payload).await;
+                let result = dispatch(&state, &job.job_type, job.id, tenant_id, &job.payload).await;
 
                 match result {
                     Ok(()) => {
@@ -64,9 +62,20 @@ async fn main() {
                         info!(job_id = %job.id, "job completed");
                     }
                     Err(e) => {
-                        warn!(job_id = %job.id, error = %e, "job failed");
-                        if let Err(mark_err) = jobs::mark_failed(&state.pool, job.id, &e.to_string()).await {
-                            error!(job_id = %job.id, error = %mark_err, "failed to mark job failed");
+                        let attempts_left = job.max_attempts.saturating_sub(job.attempts);
+                        let should_retry = matches!(&e, AppError::Internal(_)) && attempts_left > 0;
+
+                        if should_retry {
+                            warn!(job_id = %job.id, attempts_left, error = %e, "transient error, requeuing");
+                            if let Err(re) = jobs::requeue_with_delay(&state.pool, job.id, 60, &e.to_string()).await {
+                                error!(job_id = %job.id, error = %re, "failed to requeue, marking failed");
+                                let _ = jobs::mark_failed(&state.pool, job.id, &e.to_string()).await;
+                            }
+                        } else {
+                            warn!(job_id = %job.id, error = %e, "job failed");
+                            if let Err(mark_err) = jobs::mark_failed(&state.pool, job.id, &e.to_string()).await {
+                                error!(job_id = %job.id, error = %mark_err, "failed to mark job failed");
+                            }
                         }
                     }
                 }
@@ -78,13 +87,14 @@ async fn main() {
 async fn dispatch(
     state: &WorkerState,
     job_type: &str,
+    job_id: Uuid,
     tenant_id: TenantId,
     payload: &serde_json::Value,
-) -> Result<(), common::AppError> {
+) -> Result<(), AppError> {
     match job_type {
-        "scan" => handlers::scan::handle(&state.pool, tenant_id, payload).await,
-        "analysis" => handlers::analysis::handle(&state.pool, tenant_id, payload).await,
+        "scan"       => handlers::scan::handle(&state.pool, job_id, tenant_id, payload).await,
+        "analysis"   => handlers::analysis::handle(&state.pool, tenant_id, payload).await,
         "llm_report" => handlers::llm_report::handle(&state.pool, &state.llm, tenant_id, payload).await,
-        other => Err(common::AppError::internal(format!("unknown job type: {other}"))),
+        other        => Err(AppError::internal(format!("unknown job type: {other}"))),
     }
 }

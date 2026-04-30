@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO vulnerabilities\n               (tenant_id, target_id, port_id, fingerprint, title, severity, cvss_score,\n                cve_id, source, evidence, status)\n           VALUES ($1, $2, $3, $4, $5, $6::text::risk_level, $7::float8, $8, 'nmap'::vuln_source, $9, 'open'::vuln_status)\n           ON CONFLICT (tenant_id, target_id, fingerprint)\n           DO UPDATE SET\n               last_seen_at = now(),\n               cvss_score   = EXCLUDED.cvss_score,\n               evidence     = EXCLUDED.evidence,\n               updated_at   = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Float8",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e5cfc871942c616c8f7667f46e1ea7a8ae09d9a92aa1dca3c74f40db358ff6b7"
+}

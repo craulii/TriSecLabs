@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    COUNT(*) FILTER (WHERE severity = 'critical') AS critical,\n                    COUNT(*) FILTER (WHERE severity = 'high')     AS high,\n                    COUNT(*) FILTER (WHERE severity = 'medium')   AS medium,\n                    COUNT(*) FILTER (WHERE severity = 'low')      AS low\n                   FROM vulnerabilities\n                   WHERE target_id = $1\n                     AND status NOT IN ('false_positive'::vuln_status, 'accepted'::vuln_status)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "critical",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "high",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "medium",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "low",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "de1572427e7793e334483b17e0b8a6faada3d5f15c56f7a3f8b548e60f061d83"
+}

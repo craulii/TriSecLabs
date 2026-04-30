@@ -20,8 +20,9 @@ pub async fn handle(pool: &PgPool, tenant_id: TenantId, payload: &Value) -> Resu
                     COUNT(*) FILTER (WHERE severity = 'high')     AS high,
                     COUNT(*) FILTER (WHERE severity = 'medium')   AS medium,
                     COUNT(*) FILTER (WHERE severity = 'low')      AS low
-                   FROM scan_findings
-                   WHERE target_id = $1"#,
+                   FROM vulnerabilities
+                   WHERE target_id = $1
+                     AND status NOT IN ('false_positive'::vuln_status, 'accepted'::vuln_status)"#,
                 target_id
             )
             .fetch_one(conn)
@@ -38,13 +39,13 @@ pub async fn handle(pool: &PgPool, tenant_id: TenantId, payload: &Value) -> Resu
     })
     .await?;
 
-    let score = (critical * 40 + high * 20 + medium * 10 + low * 5).min(100) as i16;
+    let score = (critical * 25 + high * 10 + medium * 4 + low).min(100) as i16;
 
     let risk_level = match score {
-        90..=100 => "critical",
-        60..=89  => "high",
-        30..=59  => "medium",
-        1..=29   => "low",
+        75..=100 => "critical",
+        50..=74  => "high",
+        25..=49  => "medium",
+        10..=24  => "low",
         _        => "info",
     };
 

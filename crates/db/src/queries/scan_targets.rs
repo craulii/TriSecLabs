@@ -72,6 +72,39 @@ pub async fn create(
     .map_err(|e| AppError::Database(e.to_string()))
 }
 
+pub async fn update(
+    tx: &mut Transaction<'static, Postgres>,
+    id: Uuid,
+    name: &str,
+    value: &str,
+) -> Result<ScanTargetRow, AppError> {
+    sqlx::query_as!(
+        ScanTargetRow,
+        r#"UPDATE scan_targets
+           SET name = $2, value = $3, updated_at = now()
+           WHERE id = $1
+           RETURNING id, tenant_id, name, value, kind::text AS "kind!", risk_score,
+                     risk_level::text AS "risk_level", last_scanned_at, created_at"#,
+        id,
+        name,
+        value,
+    )
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))
+}
+
+pub async fn delete(conn: &mut PgConnection, id: Uuid) -> Result<bool, AppError> {
+    let result = sqlx::query!(
+        "DELETE FROM scan_targets WHERE id = $1",
+        id
+    )
+    .execute(conn)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?;
+    Ok(result.rows_affected() > 0)
+}
+
 pub async fn update_risk(
     conn: &mut PgConnection,
     id: Uuid,

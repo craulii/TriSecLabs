@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE scan_targets\n         SET risk_score = $2, risk_level = $3::text::risk_level, updated_at = now()\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int2",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4728e56aab9e1f98288c4087761f351bc51ea641b18adcb726b497ce86051c27"
+}

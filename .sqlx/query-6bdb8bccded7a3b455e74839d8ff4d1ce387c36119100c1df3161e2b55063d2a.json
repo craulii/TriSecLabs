@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n               id, target_id, port_id, fingerprint, title, description,\n               severity::text AS \"severity!\", cvss_score, cvss_vector,\n               cve_id, cwe_id, status::text AS \"status!\", source::text AS \"source!\",\n               evidence, remediation_note, first_seen_at, last_seen_at, resolved_at\n           FROM vulnerabilities\n           WHERE target_id = $1\n           ORDER BY\n               CASE severity\n                   WHEN 'critical' THEN 1 WHEN 'high' THEN 2\n                   WHEN 'medium'   THEN 3 WHEN 'low'  THEN 4 ELSE 5\n               END,\n               first_seen_at DESC",
+  "query": "SELECT\n               id, target_id, port_id, fingerprint, title, description,\n               severity::text AS \"severity!\", cvss_score::float8 AS cvss_score, cvss_vector,\n               cve_id, cwe_id, status::text AS \"status!\", source::text AS \"source!\",\n               evidence, remediation_note, first_seen_at, last_seen_at, resolved_at\n           FROM vulnerabilities\n           WHERE target_id = $1\n           ORDER BY\n               CASE severity\n                   WHEN 'critical' THEN 1 WHEN 'high' THEN 2\n                   WHEN 'medium'   THEN 3 WHEN 'low'  THEN 4 ELSE 5\n               END,\n               first_seen_at DESC",
   "describe": {
     "columns": [
       {
@@ -41,7 +41,7 @@
       {
         "ordinal": 7,
         "name": "cvss_score",
-        "type_info": "Numeric"
+        "type_info": "Float8"
       },
       {
         "ordinal": 8,
@@ -107,7 +107,7 @@
       false,
       true,
       null,
-      true,
+      null,
       true,
       true,
       true,
@@ -120,5 +120,5 @@
       true
     ]
   },
-  "hash": "e7ec9a3ecf2207270836f459a72f9616845b61ca0d694f2199f83821e27b37db"
+  "hash": "6bdb8bccded7a3b455e74839d8ff4d1ce387c36119100c1df3161e2b55063d2a"
 }

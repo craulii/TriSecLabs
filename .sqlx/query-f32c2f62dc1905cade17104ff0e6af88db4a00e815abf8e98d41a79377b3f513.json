@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE exposed_ports\n           SET is_active = false, updated_at = now()\n           WHERE target_id = $1\n             AND is_active = true\n             AND NOT (id = ANY($2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f32c2f62dc1905cade17104ff0e6af88db4a00e815abf8e98d41a79377b3f513"
+}

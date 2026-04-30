@@ -91,3 +91,41 @@ pub struct AnalysisPayload {
 pub struct LlmReportPayload {
     pub target_id: Uuid,
 }
+
+// ─── Progreso de jobs (consumido por el endpoint SSE) ──────────────────────
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScanStage {
+    Validating,
+    Starting,
+    HostDiscovery,
+    PortScan,
+    ServiceDetection,
+    Vulners,
+    Persisting,
+    Done,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveredPort {
+    pub port:     i32,
+    pub protocol: String,
+    pub service:  Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobProgressEvent {
+    pub id:               Uuid,
+    pub status:           String,
+    pub stage:            Option<ScanStage>,
+    pub progress:         Option<i16>,
+    pub discovered_ports: Vec<DiscoveredPort>,
+    pub log:              Vec<String>,
+    pub error:            Option<String>,
+    /// Mensaje informativo del backend (ej. "Sin puertos abiertos detectados").
+    /// Diferente a `error`: el job completó con éxito pero hay contexto extra.
+    pub note:             Option<String>,
+    pub updated_at:       DateTime<Utc>,
+}

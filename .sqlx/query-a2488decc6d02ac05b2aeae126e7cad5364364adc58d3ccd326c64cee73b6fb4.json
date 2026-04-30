@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE scan_targets SET last_scanned_at = now(), updated_at = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a2488decc6d02ac05b2aeae126e7cad5364364adc58d3ccd326c64cee73b6fb4"
+}

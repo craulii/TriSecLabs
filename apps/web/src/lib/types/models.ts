@@ -120,3 +120,34 @@ export interface PaginatedResponse<T> {
   page:  number;
   limit: number;
 }
+
+// ─── Job progress (consumido por SSE / snapshot endpoint) ───────────────────
+
+export type ScanStage =
+  | 'validating'
+  | 'starting'
+  | 'host_discovery'
+  | 'port_scan'
+  | 'service_detection'
+  | 'vulners'
+  | 'persisting'
+  | 'done'
+  | 'failed';
+
+export interface DiscoveredPort {
+  port:     number;
+  protocol: string;
+  service:  string | null;
+}
+
+export interface JobProgressEvent {
+  id:               string;
+  status:           'pending' | 'running' | 'done' | 'failed';
+  stage:            ScanStage | null;
+  progress:         number | null;
+  discovered_ports: DiscoveredPort[];
+  log:              string[];
+  error:            string | null;
+  note:             string | null;
+  updated_at:       string;
+}

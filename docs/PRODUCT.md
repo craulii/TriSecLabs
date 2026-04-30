@@ -193,9 +193,18 @@ Aplicación nativa para Windows, macOS y Linux. El servidor API corre integrado 
 
 ---
 
-## Hoja de ruta (próximas funcionalidades)
+## Hoja de ruta
 
-- **Integración nmap activa** — escaneos automáticos programados
+### Entregado
+
+- ✅ **Integración nmap activa** — escaneo con `-sV` + script `vulners` para detección de CVEs por servicio
+- ✅ **Scan con progreso en vivo** — drawer con timeline de etapas, puertos descubiertos en tiempo real y log de nmap (vía Server-Sent Events)
+- ✅ **Validación robusta de targets** — feedback claro ante DNS fail, host inalcanzable, timeout, o tipo de asset no escaneable
+- ✅ **Retry inteligente** — errores transitorios se reencolan automáticamente; errores de input fallan inmediato
+
+### Próximas funcionalidades
+
+- **Scans programados** — recurrencia configurable por activo (diario, semanal, mensual)
 - **Integración Shodan** — visibilidad de activos indexados públicamente
 - **Gestión completa de usuarios** — invitaciones, cambio de contraseña, 2FA
 - **Gestión de tenants** — creación y configuración desde la UI
